@@ -3,9 +3,11 @@ import bcrypt from "bcrypt";
 import { z } from "zod";
 import { userModel } from "./db.js";
 import jwt from "jsonwebtoken";
-
+import dotenv from "dotenv";
+dotenv.config();
 export const authRoutes = Router();
-const Secret = process.env.SECRET;
+const Secret = process.env.JWT_SECRET;
+console.log(Secret);
 const signupSchema = z.object({
   email: z.string().email("Invalid email input"),
   password: z.string().min(6, "password must be atlest 6 characters long"),
@@ -50,30 +52,41 @@ authRoutes.post("/signin", async (req, res) => {
   try {
     const validateData = signupSchema.parse(req.body);
     const email = validateData.email;
+    const password = validateData.password;
 
     const userExists = await userModel.findOne({
       email,
     });
-
     if (!userExists) {
-      res.status(400).json({
+      return res.status(400).json({
         msg: "user doesnt exist. Please signup",
       });
     }
     if (!Secret) {
       throw new Error("the key doesnt exist");
     }
-    const userId = userExists?._id;
-    const token = jwt.sign(
-      {
-        userId,
-      },
-      Secret
-    );
-    console.log(token);
-  } catch (err: unknown) {
+    const userMatch = await bcrypt.compare(password, userExists.password!);
+    if (userMatch) {
+      const userId = userExists?._id;
+      const token = jwt.sign(
+        {
+          userId,
+        },
+        Secret
+      );
+      return res.status(200).json({
+        message: "Login successful",
+        token: token,
+      });
+    } else {
+      res.status(500).json({
+        msg: "incorret credentials",
+      });
+    }
+  } catch (err: any) {
     res.status(500).json({
-      error: err,
+      //@ts-ignore
+      msg: err.message,
     });
   }
 });
